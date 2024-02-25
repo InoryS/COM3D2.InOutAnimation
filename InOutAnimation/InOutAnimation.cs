@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -19,16 +19,18 @@ using COM3D2.InOutAnimation.Plugin.Extensions;
 
 namespace COM3D2.InOutAnimation.Plugin
 {
+    [PluginFilter("COM3D2x64"), PluginFilter("COM3D2VRx64"), PluginFilter("COM3D2OHx64"), PluginFilter("COM3D2OHVRx64")]
     [PluginName(PluginName)]
     [PluginVersion(PluginVersion)]
     public class InOutAnimation : PluginBase
     {
         private const 
+        string PluginFilter = "COM3D2OHVRx64",
             PluginName = "InOutAnimation",
 #if !COM3D25
-            PluginVersion = "1.0.0.4";
+            PluginVersion = "1.0.0.3";
 #else
-            PluginVersion = "1.0.0.4-CR";
+            PluginVersion = "1.0.0.3-CR";
 #endif 
         private const string PathConfig = @"IOAnim",
             FileNameConfig = @"Settings";
