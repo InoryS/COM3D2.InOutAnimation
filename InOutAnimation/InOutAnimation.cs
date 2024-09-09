@@ -14,7 +14,6 @@ using UnityEngine.SceneManagement;
 using UnityInjector;
 using UnityInjector.Attributes;
 using static UnityEngine.GUILayout;
-
 using COM3D2.InOutAnimation.Plugin.Extensions;
 
 namespace COM3D2.InOutAnimation.Plugin
@@ -24,14 +23,14 @@ namespace COM3D2.InOutAnimation.Plugin
     [PluginVersion(PluginVersion)]
     public class InOutAnimation : PluginBase
     {
-        private const 
-        string PluginFilter = "COM3D2OHVRx64",
+        private const
+            string PluginFilter = "COM3D2OHVRx64",
             PluginName = "InOutAnimation",
 #if !COM3D25
-            PluginVersion = "1.0.0.3";
+            PluginVersion = "1.0.0.4";
 #else
-            PluginVersion = "1.0.0.3-CR";
-#endif 
+            PluginVersion = "1.0.04-CR";
+#endif
         private const string PathConfig = @"IOAnim",
             FileNameConfig = @"Settings";
 
@@ -51,7 +50,7 @@ namespace COM3D2.InOutAnimation.Plugin
             void Initialize();
         }
 
-#region Variables
+        #region Variables
 
         private readonly Version pluginGameVer = new Version("1.32.0");
         private Version currentGameVer;
@@ -83,9 +82,9 @@ namespace COM3D2.InOutAnimation.Plugin
         private MessageBox _msgbox;
         private static bool _debug;
 
-#endregion
+        #endregion
 
-#region MonoBehavior
+        #region MonoBehavior
 
         private void Awake()
         {
@@ -122,62 +121,66 @@ namespace COM3D2.InOutAnimation.Plugin
 
         private void Update()
         {
+            // 检查 settings 是否启用了插件
+            if (settings == null || !settings.enablePlugin)
+                return;
+
+            // 如果处于Studio模式，不进行更新
             if (isStudioMode)
                 return;
 
+            // 检查输入
             if (Input.anyKey)
                 CheckInput();
 
-            if (!settings.enablePlugin)
-                return;
-
-            mediator.FindTarget(current);
-
-            script.Parse(mediator);
-
-            if (!mediator.TargetMaid.IsValid() || !current.isPlay)
-                return;
-
-            mediator.PrepareMuffs();
-
-            mediator.PreparePokos(current);
-
-            if (mediator.muffsPrepared && mediator.pokosPrepared)
+            // 确保 mediator 和 current 不为 null
+            if (mediator != null && current != null)
             {
-                mediator.ValidatePair(current);
+                mediator.FindTarget(current);
+                script?.Parse(mediator);
 
-                mediator.UpdateValues(current);
+                // 确保 target maid 和 current 是否有效
+                if (!mediator.TargetMaid.IsValid() || !current.isPlay)
+                    return;
 
-                switch (Time.frameCount % 30)
+                mediator.PrepareMuffs();
+                mediator.PreparePokos(current);
+
+                if (mediator.muffsPrepared && mediator.pokosPrepared)
                 {
-                    case 0:
-                        current.showSkillSelect = IsShowHideScrolls(NameSkillSel);
-                        break;
+                    mediator.ValidatePair(current);
+                    mediator.UpdateValues(current);
 
-                    case 10:
-                        current.showParameter = IsShowHideScrolls(NameParamView);
-                        break;
+                    switch (Time.frameCount % 30)
+                    {
+                        case 0:
+                            current.showSkillSelect = IsShowHideScrolls(NameSkillSel);
+                            break;
+                        case 10:
+                            current.showParameter = IsShowHideScrolls(NameParamView);
+                            break;
+                        case 15:
+                            current.showResultPanel = IsShowResultPanel();
+                            break;
+                        case 20:
+                            current.showConfigPanel = IsShowConfigPanel();
+                            break;
+                    }
 
-                    case 15:
-                        current.showResultPanel = IsShowResultPanel();
-                        break;
+                    if (mediator.manLength > 0)
+                        current.isShooting = IsShooting();
 
-                    case 20:
-                        current.showConfigPanel = IsShowConfigPanel();
-                        break;
+                    current.CanDrawOverlay = true;
                 }
-
-                if (mediator.manLength > 0)
-                    current.isShooting = IsShooting();
-
-                current.CanDrawOverlay = true;
             }
 
+            // 如果 frame 计数器到一定时间，检查屏幕渐变
             if (Time.frameCount % 20 == 5)
                 CheckScreenFade();
 
-            if (!settings.enablePlugin || !mediator.TargetMan.IsValid()) return;
-            var smr = mediator.TargetMan.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s =>
+            // 检查是否隐藏或显示男性角色身体
+            if (!settings.enablePlugin || !mediator?.TargetMan.IsValid()) return;
+            var smr = mediator?.TargetMan.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s =>
                 s.name.Equals("karada", StringComparison.InvariantCultureIgnoreCase));
             if (smr == null)
                 return;
@@ -224,46 +227,53 @@ namespace COM3D2.InOutAnimation.Plugin
 
         private void OnGUI()
         {
+            // 如果是Studio模式，不需要进行绘制
             if (isStudioMode)
                 return;
 
-            if (controller.showController)
+            // 检查 controller 是否为 null，避免 null 引用
+            if (controller != null && controller.showController)
                 controller.Draw();
 
-            if (settings.enablePlugin && mediator.TargetMaid.IsValid() && current.isPlay)
+            // 检查 settings 是否为 null，避免 null 引用
+            if (settings != null && settings.enablePlugin && mediator != null && mediator.TargetMaid.IsValid() &&
+                current != null && current.isPlay)
             {
                 DrawFlipAnims();
                 DrawPokoCam();
                 DrawFaceCam();
             }
 
-            if (_debug)
-                _msgbox?.Draw(
+            // 如果 _msgbox 不为 null，则绘制 debug 信息
+            if (_debug && _msgbox != null)
+            {
+                _msgbox.Draw(
                     new GUIContent(
-                        $"maid:{script.MaidAnmName}\n" +
-                        $"man0:{script.ManAnmName}\n" +
-                        $"currentSkill:{current.CurrentSkill}\n" +
-                        $"prim:{current.PrimaryMuff.ToString()}\n" +
-                        $"mode:{current.PlayMode.ToString()}\n" +
-                        $"num:{current.MuffNum.ToString()}\n" +
-                        $"stat:{current.PlayState}\n" +
-                        $"play:{current.isPlay} onani:{current.isOnani}\n" +
-                        $"pokotype:{current.PokoType} \n" +
-                        $"poko[0]:{mediator.pokos[0]?.TargetMuff}\n" +
-                        $"poko[1]:{mediator.pokos[1]?.TargetMuff}\n" +
-                        $"poko[2]:{mediator.pokos[2]?.TargetMuff}\n" +
-                        $"skillSel:{current.showSkillSelect} " +
-                        $"paramVew:{current.showParameter} " +
-                        $"confPanel:{current.showConfigPanel}" +
-                        $"resPanel:{current.showResultPanel}" +
-                        $"isShot:{current.isShooting}"
+                        $"maid:{script?.MaidAnmName}\n" +
+                        $"man0:{script?.ManAnmName}\n" +
+                        $"currentSkill:{current?.CurrentSkill}\n" +
+                        $"prim:{current?.PrimaryMuff.ToString()}\n" +
+                        $"mode:{current?.PlayMode.ToString()}\n" +
+                        $"num:{current?.MuffNum.ToString()}\n" +
+                        $"stat:{current?.PlayState}\n" +
+                        $"play:{current?.isPlay} onani:{current?.isOnani}\n" +
+                        $"pokotype:{current?.PokoType}\n" +
+                        $"poko[0]:{mediator?.pokos[0]?.TargetMuff}\n" +
+                        $"poko[1]:{mediator?.pokos[1]?.TargetMuff}\n" +
+                        $"poko[2]:{mediator?.pokos[2]?.TargetMuff}\n" +
+                        $"skillSel:{current?.showSkillSelect}\n" +
+                        $"paramView:{current?.showParameter}\n" +
+                        $"confPanel:{current?.showConfigPanel}\n" +
+                        $"resPanel:{current?.showResultPanel}\n" +
+                        $"isShot:{current?.isShooting}"
                     )
                 );
+            }
         }
 
-#endregion
+        #endregion
 
-#region Methods
+        #region Methods
 
         private void Initialize()
         {
@@ -312,7 +322,7 @@ namespace COM3D2.InOutAnimation.Plugin
             if (settings.enablePokoCam && mediator.manLength > 0)
             {
                 if (!pokoCam.SetupCam(mediator.TargetMaid, mediator.TargetMan, current.PrimaryMuff)) return;
-                var n = (int) current.PrimaryMuff;
+                var n = (int)current.PrimaryMuff;
                 if (n > 2) n = 2;
                 if (flipAnims[n] == null && mediator.muffs[n] == null) return;
                 pokoCam.Action();
@@ -358,7 +368,7 @@ namespace COM3D2.InOutAnimation.Plugin
                                               && Input.GetKeyDown(settings.ControllerHotKey))
                 _debug = !_debug;
 
-            //if (!settings.enablePlugin) 
+            //if (!settings.enablePlugin)
             //    return;
             //
             //if (controller.showController && settings.enablePokoCam && settings.PokoCam_CustomPos)
@@ -413,8 +423,8 @@ namespace COM3D2.InOutAnimation.Plugin
             if (_hideScroll.ParentObject.name != hideName)
                 return false;
 
-            return (bool) (_hideScroll.GetType().GetField(NameHideScrollField, bindingFlags)?.GetValue(_hideScroll) ??
-                           false);
+            return (bool)(_hideScroll.GetType().GetField(NameHideScrollField, bindingFlags)?.GetValue(_hideScroll) ??
+                          false);
         }
 
         private bool IsShowConfigPanel()
@@ -487,9 +497,9 @@ namespace COM3D2.InOutAnimation.Plugin
             DestroyPluginObjects();
         }
 
-#endregion
+        #endregion
 
-#region Classes
+        #region Classes
 
         private class Mediator : IInitializable
         {
@@ -694,7 +704,7 @@ namespace COM3D2.InOutAnimation.Plugin
                 switch (current.PlayMode)
                 {
                     case PlayMode.Self:
-                        if (pokos.Any(poko => poko?.ValidateTargetMuff(muffs[(int) current.PrimaryMuff]) ?? false))
+                        if (pokos.Any(poko => poko?.ValidateTargetMuff(muffs[(int)current.PrimaryMuff]) ?? false))
                             return;
                         pokosPrepared = false;
                         return;
@@ -702,7 +712,7 @@ namespace COM3D2.InOutAnimation.Plugin
                     case PlayMode.Normal:
                     case PlayMode.Swap:
                     case PlayMode.Harem:
-                        var n = (int) current.PrimaryMuff == 1 ? 1 : 0;
+                        var n = (int)current.PrimaryMuff == 1 ? 1 : 0;
                         switch (current.PokoType)
                         {
                             case PokoType.Finger:
@@ -724,7 +734,7 @@ namespace COM3D2.InOutAnimation.Plugin
                                 break;
 
                             case PokoType.TNP:
-                                if (pokos[0] is TNP p && p.ValidateTargetMuff(muffs[(int) current.PrimaryMuff]))
+                                if (pokos[0] is TNP p && p.ValidateTargetMuff(muffs[(int)current.PrimaryMuff]))
                                     return;
                                 break;
                         }
@@ -733,12 +743,12 @@ namespace COM3D2.InOutAnimation.Plugin
                         return;
 
                     case PlayMode.Multiple:
-                        pokos[0]?.ValidateTargetMuff(muffs[(int) current.PrimaryMuff]);
+                        pokos[0]?.ValidateTargetMuff(muffs[(int)current.PrimaryMuff]);
 
                         switch (current.MuffNum)
                         {
                             case MuffNum.Double:
-                                pokos[1]?.ValidateTargetMuff(muffs[1 - (int) current.PrimaryMuff]);
+                                pokos[1]?.ValidateTargetMuff(muffs[1 - (int)current.PrimaryMuff]);
                                 return;
 
                             case MuffNum.Triple:
@@ -749,7 +759,7 @@ namespace COM3D2.InOutAnimation.Plugin
                                         continue;
                                     for (var j = 2; j >= 0; j--)
                                     {
-                                        if (j == (int) current.PrimaryMuff)
+                                        if (j == (int)current.PrimaryMuff)
                                             continue;
                                         if (pokos[i].ValidateTargetMuff(muffs[j]))
                                             break;
@@ -772,10 +782,10 @@ namespace COM3D2.InOutAnimation.Plugin
                     {
                         if (poko == null || !poko.Validated)
                             continue;
-                        if ((int) poko.TargetMuff != i) continue;
+                        if ((int)poko.TargetMuff != i) continue;
                         var _v = muffs[i].GetInsertRate(current, poko);
                         value = _v > value ? _v : value;
-                        var n = (int) current.PrimaryMuff == 1 ? 1 : 0;
+                        var n = (int)current.PrimaryMuff == 1 ? 1 : 0;
                         if ((current.PokoType == PokoType.Finger || current.PokoType == PokoType.Tongue)
                             && i == n && value > 0.01f)
                             value = settings.Morpher_Threshold * 0.5f;
@@ -902,7 +912,9 @@ namespace COM3D2.InOutAnimation.Plugin
             private readonly Regex patternMultiple = new Regex(@"(ran|muri|kousoku).*\dp", RegexOptions.Compiled);
             private readonly Regex patternNoneBreak = new Regex(@"name|suri|koki|tama|sumata", RegexOptions.Compiled);
             private readonly Regex patternNoneOutside = new Regex(@"^.*(_soto|_kao).*$", RegexOptions.Compiled);
-            private readonly Regex patternPlaying = new Regex(@"^.*_\d([ab]0[12])?(s\d)?_|_gr|_momi", RegexOptions.Compiled);
+
+            private readonly Regex patternPlaying =
+                new Regex(@"^.*_\d([ab]0[12])?(s\d)?_|_gr|_momi", RegexOptions.Compiled);
 
             private readonly Regex Separator =
                 new Regex(@"_taiki|_in|_ONCE|_once|_shaseigo|_tanetukego|_zeccyougo|_sissin|_\d[^p]",
@@ -1066,7 +1078,7 @@ namespace COM3D2.InOutAnimation.Plugin
         }
 
 
-#region Muffs
+        #region Muffs
 
         private class Front : Muff
         {
@@ -1100,7 +1112,7 @@ namespace COM3D2.InOutAnimation.Plugin
                     _root = body.Spine
                         ? body.Spine
                         : body.GetIKBone_Spine0();
-                
+
 
                 if (!_mid)
                     _mid = body.Pelvis
@@ -1536,7 +1548,7 @@ namespace COM3D2.InOutAnimation.Plugin
                 if (body == null) return;
 
 
-                for (var i = 0; i < (int) TBody.SlotID.end; i++)
+                for (var i = 0; i < (int)TBody.SlotID.end; i++)
                     if (body.GetGoSlot(i).morph is TMorph m && m.hash.ContainsKey(key))
                         keyAvailableSlot.Add(i);
             }
@@ -1576,10 +1588,10 @@ namespace COM3D2.InOutAnimation.Plugin
             }
         }
 
-#endregion
+        #endregion
 
 
-#region Pokos
+        #region Pokos
 
         private class TNP : Poko
         {
@@ -1834,14 +1846,14 @@ namespace COM3D2.InOutAnimation.Plugin
             public void DrawTrails()
             {
                 if (trails == null)
-                    trails = new[] {new PokoTrail(), new PokoTrail(), new PokoTrail()};
+                    trails = new[] { new PokoTrail(), new PokoTrail(), new PokoTrail() };
                 trails[0].Draw(positions.Top, Color.cyan, Color.blue);
                 trails[1].Draw(positions.Mid, Color.magenta, Color.red);
                 trails[2].Draw(positions.Root, Color.yellow, Color.green);
             }
         }
 
-#endregion
+        #endregion
 
         public struct Positions
         {
@@ -2018,13 +2030,13 @@ namespace COM3D2.InOutAnimation.Plugin
             {
                 this.width = width;
                 this.height = height;
-                aspect = height != 0 ? (float) this.width / this.height : 1.0f;
+                aspect = height != 0 ? (float)this.width / this.height : 1.0f;
             }
 
             public Rect Get(int n, bool flag)
             {
                 if (aspect < 0.001f && aspect > -0.001f)
-                    aspect = (float) Screen.width / Screen.height;
+                    aspect = (float)Screen.width / Screen.height;
                 var stg = settings;
                 var h = Screen.height * 0.2f;
                 var w = rect.height * aspect;
@@ -2112,11 +2124,11 @@ namespace COM3D2.InOutAnimation.Plugin
                               ? 0
                               : Mathf.Clamp01(current.rates[number] * 10));
 
-                material.renderQueue = (int) settings.Overlay_RenderQueue;
+                material.renderQueue = (int)settings.Overlay_RenderQueue;
                 material.mainTexture = texture;
 
                 var aspect = texture.height == 0
-                    ? (float) texture.width / texture.height
+                    ? (float)texture.width / texture.height
                     : 1.0f;
                 var dist = Vector3.Distance(pos.Top, pos.Root);
 
@@ -2140,7 +2152,7 @@ namespace COM3D2.InOutAnimation.Plugin
         }
 
 
-#region Cams
+        #region Cams
 
         private abstract class IOCam : IInitializable
         {
@@ -2171,10 +2183,10 @@ namespace COM3D2.InOutAnimation.Plugin
             {
                 if (width_ < 1 || height_ < 1)
                     return;
-                if (renderTexture.width == (int) width_ && renderTexture.height == (int) height_)
+                if (renderTexture.width == (int)width_ && renderTexture.height == (int)height_)
                     return;
-                width = (int) width_;
-                height = (int) height_;
+                width = (int)width_;
+                height = (int)height_;
                 renderTexture = new RenderTexture(width, height, 0);
             }
 
@@ -2292,7 +2304,7 @@ namespace COM3D2.InOutAnimation.Plugin
                     return;
                 color.a = current.showSkillSelect || current.showConfigPanel || current.showResultPanel
                     ? 0.0f
-                    : settings.PokoCam_Transparency * Mathf.Clamp01(current.rates[(int) current.PrimaryMuff] * 10);
+                    : settings.PokoCam_Transparency * Mathf.Clamp01(current.rates[(int)current.PrimaryMuff] * 10);
                 GUI.color = color;
                 SetRenderTexture(rect.width, rect.height);
                 GUI.DrawTexture(rect, GetRenderTexture(), ScaleMode.ScaleToFit, true);
@@ -2347,7 +2359,7 @@ namespace COM3D2.InOutAnimation.Plugin
 
             private Transform GetCameraPos(Maid maid)
             {
-                var head = maid.body0.GetGoSlot((int) TBody.SlotID.head).obj_tr;
+                var head = maid.body0.GetGoSlot((int)TBody.SlotID.head).obj_tr;
                 for (var j = 0; j < head.childCount; j++)
                 {
                     var h = head.GetChild(j);
@@ -2388,7 +2400,7 @@ namespace COM3D2.InOutAnimation.Plugin
             }
         }
 
-#endregion
+        #endregion
 
 
         public class PokoTrail
@@ -2411,7 +2423,7 @@ namespace COM3D2.InOutAnimation.Plugin
                     trail = new GameObject($"{PluginName}__trail__").AddComponent<TrailRenderer>();
                     obj = trail.gameObject;
                     trail.material.shader = shader;
-                    trail.material.SetInt("_ZTest", (int) CompareFunction.Always);
+                    trail.material.SetInt("_ZTest", (int)CompareFunction.Always);
                     trail.startWidth = 0.01f;
                     trail.endWidth = 0.0f;
                     trail.time = 2;
@@ -2542,7 +2554,7 @@ namespace COM3D2.InOutAnimation.Plugin
                 {
                     var serializer = new XmlSerializer(typeof(Settings));
                     var reader = XmlReader.Create(stream, new XmlReaderSettings());
-                    return _instance = (Settings) serializer.Deserialize(reader);
+                    return _instance = (Settings)serializer.Deserialize(reader);
                 }
             }
 
@@ -2601,11 +2613,11 @@ namespace COM3D2.InOutAnimation.Plugin
                 pluginEnabler = new ToggleButton("プラグイン有効", s.enablePlugin, b => settings.enablePlugin = b);
                 containers = new Dictionary<string, Container>
                 {
-                    {"ongui", new Container("OnGUI表示")},
-                    {"overlay", new Container("メイドに重ねて表示")},
-                    {"morpher", new Container("シェイプキー連動")},
-                    {"pokocam", new Container("股間視点")},
-                    {"facecam", new Container("顔カメラ")}
+                    { "ongui", new Container("OnGUI表示") },
+                    { "overlay", new Container("メイドに重ねて表示") },
+                    { "morpher", new Container("シェイプキー連動") },
+                    { "pokocam", new Container("股間視点") },
+                    { "facecam", new Container("顔カメラ") }
                 };
 
                 containers["ongui"].Add(new ToggleButton("有効", s.enableOnGUI, b => settings.enableOnGUI = b));
@@ -2724,7 +2736,7 @@ namespace COM3D2.InOutAnimation.Plugin
                             continue;
                         BeginHorizontal(noOptions);
                         {
-                            Box($"{i} {GetPokoTypeChar(p)} : {MuffNames[(int) p.TargetMuff]}", noOptions);
+                            Box($"{i} {GetPokoTypeChar(p)} : {MuffNames[(int)p.TargetMuff]}", noOptions);
                         }
                         EndHorizontal();
                     }
@@ -3114,7 +3126,7 @@ namespace COM3D2.InOutAnimation.Plugin
             }
         }
 
-#endregion
+        #endregion
     }
 
 
@@ -3133,7 +3145,7 @@ namespace COM3D2.InOutAnimation.Plugin
         }
     }
 
-#region enums
+    #region enums
 
     internal enum MuffNum
     {
@@ -3187,5 +3199,5 @@ namespace COM3D2.InOutAnimation.Plugin
         Tongue
     }
 
-#endregion
+    #endregion
 }
