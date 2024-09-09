@@ -179,7 +179,7 @@ namespace COM3D2.InOutAnimation.Plugin
                 CheckScreenFade();
 
             // 检查是否隐藏或显示男性角色身体
-            if (!settings.enablePlugin || !mediator?.TargetMan.IsValid()) return;
+            if (!settings.enablePlugin || !(mediator?.TargetMan.IsValid() ?? false)) return;
             var smr = mediator?.TargetMan.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s =>
                 s.name.Equals("karada", StringComparison.InvariantCultureIgnoreCase));
             if (smr == null)
