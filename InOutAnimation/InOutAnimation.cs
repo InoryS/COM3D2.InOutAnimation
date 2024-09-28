@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -8,29 +7,32 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Serialization;
+using COM3D2.InOutAnimation.Plugin.Extensions;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityInjector;
 using UnityInjector.Attributes;
 using static UnityEngine.GUILayout;
-using COM3D2.InOutAnimation.Plugin.Extensions;
+using Debug = UnityEngine.Debug;
 
 namespace COM3D2.InOutAnimation.Plugin
 {
-    [PluginFilter("COM3D2x64"), PluginFilter("COM3D2VRx64"), PluginFilter("COM3D2OHx64"), PluginFilter("COM3D2OHVRx64")]
     [PluginName(PluginName)]
     [PluginVersion(PluginVersion)]
     public class InOutAnimation : PluginBase
     {
         private const
-            string PluginFilter = "COM3D2OHVRx64",
+            string PluginFilter = "COM3D2x64",
             PluginName = "InOutAnimation",
+
 #if !COM3D25
-            PluginVersion = "1.0.0.4";
+            PluginVersion = "1.0.0.5-Inory";
 #else
-            PluginVersion = "1.0.04-CR";
+            PluginVersion = "1.0.0.5-CR-Inory";
 #endif
+
+
         private const string PathConfig = @"IOAnim",
             FileNameConfig = @"Settings";
 
@@ -93,9 +95,14 @@ namespace COM3D2.InOutAnimation.Plugin
 
         private void Start()
         {
+            Debug.Log("InOutAnimation - Plugin Start - Initializing...");
+
             currentGameVer = new Version(GameUty.GetBuildVersionText());
+            Debug.Log($"InOutAnimation - Current Game Version: {currentGameVer}");
+
             if (pluginGameVer > currentGameVer)
             {
+                Debug.LogError("InOutAnimation - Plugin disabled: Game version mismatch");
                 enabled = false;
                 return;
             }
@@ -104,101 +111,160 @@ namespace COM3D2.InOutAnimation.Plugin
 
             SceneManager.sceneLoaded += (scene, mode) =>
             {
-                foreach (var flipAnim in flipAnims)
-                    flipAnim.Load();
+                Debug.Log($"InOutAnimation - Scene loaded: {scene.name}");
+
+                if (flipAnims == null)
+                {
+                    Debug.LogError("InOutAnimation - flipAnims is null!");
+                }
+                else
+                {
+                    foreach (var flipAnim in flipAnims)
+                    {
+                        if (flipAnim == null)
+                        {
+                            Debug.LogError("InOutAnimation - flipAnim is null!");
+                            continue;
+                        }
+
+                        flipAnim.Load();
+                    }
+                }
 
                 settings = Settings.Load();
+                if (settings == null)
+                {
+                    Debug.LogError("InOutAnimation - Settings failed to load.");
+                }
+
                 isStudioMode = scene.name.Contains("ScenePhotoMode");
             };
 
             SceneManager.sceneUnloaded += scene =>
             {
+                Debug.Log($"InOutAnimation - Scene unloaded: {scene.name}");
                 AllReset();
                 controller.showController = false;
                 Settings.Save();
             };
         }
 
+
         private void Update()
         {
-            // 检查 settings 是否启用了插件
+            // 如果插件未启用，或者处于 Studio 模式，直接返回
             if (settings == null || !settings.enablePlugin)
+            {
                 return;
+            }
 
-            // 如果处于Studio模式，不进行更新
             if (isStudioMode)
+            {
                 return;
+            }
 
             // 检查输入
             if (Input.anyKey)
+            {
                 CheckInput();
+            }
 
             // 确保 mediator 和 current 不为 null
-            if (mediator != null && current != null)
+            if (mediator == null || current == null)
             {
-                mediator.FindTarget(current);
-                script?.Parse(mediator);
-
-                // 确保 target maid 和 current 是否有效
-                if (!mediator.TargetMaid.IsValid() || !current.isPlay)
-                    return;
-
-                mediator.PrepareMuffs();
-                mediator.PreparePokos(current);
-
-                if (mediator.muffsPrepared && mediator.pokosPrepared)
-                {
-                    mediator.ValidatePair(current);
-                    mediator.UpdateValues(current);
-
-                    switch (Time.frameCount % 30)
-                    {
-                        case 0:
-                            current.showSkillSelect = IsShowHideScrolls(NameSkillSel);
-                            break;
-                        case 10:
-                            current.showParameter = IsShowHideScrolls(NameParamView);
-                            break;
-                        case 15:
-                            current.showResultPanel = IsShowResultPanel();
-                            break;
-                        case 20:
-                            current.showConfigPanel = IsShowConfigPanel();
-                            break;
-                    }
-
-                    if (mediator.manLength > 0)
-                        current.isShooting = IsShooting();
-
-                    current.CanDrawOverlay = true;
-                }
+                return;
             }
 
-            // 如果 frame 计数器到一定时间，检查屏幕渐变
-            if (Time.frameCount % 20 == 5)
-                CheckScreenFade();
+            mediator.FindTarget(current);
+            script?.Parse(mediator);
 
-            // 检查是否隐藏或显示男性角色身体
-            if (!settings.enablePlugin || !(mediator?.TargetMan.IsValid() ?? false)) return;
-            var smr = mediator?.TargetMan.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(s =>
-                s.name.Equals("karada", StringComparison.InvariantCultureIgnoreCase));
-            if (smr == null)
+            // 如果目标 Maid 无效或者动画未播放，直接返回
+            if (!mediator.TargetMaid.IsValid() || !current.isPlay)
+            {
                 return;
+            }
+
+            mediator.PrepareMuffs();
+            mediator.PreparePokos(current);
+
+            if (mediator.muffsPrepared && mediator.pokosPrepared)
+            {
+                mediator.ValidatePair(current);
+                mediator.UpdateValues(current);
+
+                // 使用帧计数器进行周期性检查
+                int frameModulo = Time.frameCount % 30;
+                if (frameModulo == 0)
+                {
+                    current.showSkillSelect = IsShowHideScrolls(NameSkillSel);
+                }
+                else if (frameModulo == 10)
+                {
+                    current.showParameter = IsShowHideScrolls(NameParamView);
+                }
+                else if (frameModulo == 15)
+                {
+                    current.showResultPanel = IsShowResultPanel();
+                }
+                else if (frameModulo == 20)
+                {
+                    current.showConfigPanel = IsShowConfigPanel();
+                }
+
+                if (mediator.manLength > 0)
+                {
+                    current.isShooting = IsShooting();
+                }
+
+                current.CanDrawOverlay = true;
+            }
+
+            // 定期检查屏幕渐变
+            if (Time.frameCount % 20 == 5)
+            {
+                CheckScreenFade();
+            }
+
+            // 如果没有目标男性角色，或者插件未启用，直接返回
+            if (!mediator.TargetMan.IsValid())
+            {
+                return;
+            }
+
+            // 控制男性角色身体的显示或隐藏
+            var smr = mediator.TargetMan.GetComponentsInChildren<SkinnedMeshRenderer>()
+                .FirstOrDefault(s => s.name.Equals("karada", StringComparison.InvariantCultureIgnoreCase));
+
+            if (smr == null || smr.materials.Length < 2)
+            {
+                return;
+            }
+
             var mat = smr.materials[1];
             if (origShader == null)
+            {
                 origShader = mat.shader;
-
-            if (!current.isPlay || mat.shader.name == "CM3D2/Man" && !settings.OnGUI_HidePenis)
-            {
-                mat.shader = origShader;
             }
-            else if (mat.shader.name == origShader.name && settings.OnGUI_HidePenis)
+
+            bool shouldHidePenis = settings.OnGUI_HidePenis && current.isPlay;
+            if (shouldHidePenis)
             {
-                mat.shader = manShader;
-                mat.SetFloat("_FloatValue2", 0f);
-                mat.renderQueue = 3500;
+                if (mat.shader.name != manShader.name)
+                {
+                    mat.shader = manShader;
+                    mat.SetFloat("_FloatValue2", 0f);
+                    mat.renderQueue = 3500;
+                }
+            }
+            else
+            {
+                if (mat.shader != origShader)
+                {
+                    mat.shader = origShader;
+                }
             }
         }
+
 
         private readonly Shader manShader = Shader.Find("CM3D2/Man");
         private Shader origShader;
@@ -227,13 +293,17 @@ namespace COM3D2.InOutAnimation.Plugin
 
         private void OnGUI()
         {
-            // 如果是Studio模式，不需要进行绘制
+            // 如果是 Studio 模式，不需要进行绘制
             if (isStudioMode)
+            {
                 return;
+            }
 
             // 检查 controller 是否为 null，避免 null 引用
             if (controller != null && controller.showController)
+            {
                 controller.Draw();
+            }
 
             // 检查 settings 是否为 null，避免 null 引用
             if (settings != null && settings.enablePlugin && mediator != null && mediator.TargetMaid.IsValid() &&
@@ -247,27 +317,23 @@ namespace COM3D2.InOutAnimation.Plugin
             // 如果 _msgbox 不为 null，则绘制 debug 信息
             if (_debug && _msgbox != null)
             {
-                _msgbox.Draw(
-                    new GUIContent(
-                        $"maid:{script?.MaidAnmName}\n" +
-                        $"man0:{script?.ManAnmName}\n" +
-                        $"currentSkill:{current?.CurrentSkill}\n" +
-                        $"prim:{current?.PrimaryMuff.ToString()}\n" +
-                        $"mode:{current?.PlayMode.ToString()}\n" +
-                        $"num:{current?.MuffNum.ToString()}\n" +
-                        $"stat:{current?.PlayState}\n" +
-                        $"play:{current?.isPlay} onani:{current?.isOnani}\n" +
-                        $"pokotype:{current?.PokoType}\n" +
-                        $"poko[0]:{mediator?.pokos[0]?.TargetMuff}\n" +
-                        $"poko[1]:{mediator?.pokos[1]?.TargetMuff}\n" +
-                        $"poko[2]:{mediator?.pokos[2]?.TargetMuff}\n" +
-                        $"skillSel:{current?.showSkillSelect}\n" +
-                        $"paramView:{current?.showParameter}\n" +
-                        $"confPanel:{current?.showConfigPanel}\n" +
-                        $"resPanel:{current?.showResultPanel}\n" +
-                        $"isShot:{current?.isShooting}"
-                    )
-                );
+                _msgbox.Draw(new GUIContent($"maid:{script?.MaidAnmName}\n" +
+                                            $"man0:{script?.ManAnmName}\n" +
+                                            $"currentSkill:{current?.CurrentSkill}\n" +
+                                            $"prim:{current?.PrimaryMuff.ToString()}\n" +
+                                            $"mode:{current?.PlayMode.ToString()}\n" +
+                                            $"num:{current?.MuffNum.ToString()}\n" +
+                                            $"stat:{current?.PlayState}\n" +
+                                            $"play:{current?.isPlay} onani:{current?.isOnani}\n" +
+                                            $"pokotype:{current?.PokoType}\n" +
+                                            $"poko[0]:{mediator?.pokos[0]?.TargetMuff}\n" +
+                                            $"poko[1]:{mediator?.pokos[1]?.TargetMuff}\n" +
+                                            $"poko[2]:{mediator?.pokos[2]?.TargetMuff}\n" +
+                                            $"skillSel:{current?.showSkillSelect}\n" +
+                                            $"paramView:{current?.showParameter}\n" +
+                                            $"confPanel:{current?.showConfigPanel}\n" +
+                                            $"resPanel:{current?.showResultPanel}\n" +
+                                            $"isShot:{current?.isShooting}"));
             }
         }
 
@@ -287,6 +353,10 @@ namespace COM3D2.InOutAnimation.Plugin
             var dirInfoInjector = new DirectoryInfo($@"{Assembly.GetExecutingAssembly().Location}").Parent;
             var dirInfoConfig = new DirectoryInfo($@"{dirInfoInjector}\Config\{PathConfig}");
             settings = Settings.Load(new FileInfo($@"{dirInfoConfig}\{FileNameConfig}"));
+            if (settings == null)
+            {
+                Debug.LogError("InOutAnimation - Initialize() Failed to load plugin settings.");
+            }
 
             var pathTexSrcFront = new DirectoryInfo($@"{dirInfoConfig}\v");
             var pathTexSrcBack = new DirectoryInfo($@"{dirInfoConfig}\a");
@@ -362,7 +432,10 @@ namespace COM3D2.InOutAnimation.Plugin
         private void CheckInput()
         {
             if (Input.GetKeyDown(settings.ControllerHotKey))
+            {
                 controller.showController = !controller.showController;
+            }
+
 
             if (Input.GetKey(KeyCode.LeftAlt) && Input.GetKey(KeyCode.LeftShift)
                                               && Input.GetKeyDown(settings.ControllerHotKey))
@@ -2452,29 +2525,20 @@ namespace COM3D2.InOutAnimation.Plugin
             }
         }
 
+        [Serializable]
         public class Settings
         {
             private static Settings _instance;
             private static FileInfo fileInfo;
+
             public float Anim_Speed = 0.5f;
             public KeyCode ControllerHotKey = KeyCode.U;
-
-            //FaceCam
-            public bool enableFaceCam;
-
-            //Morpher
-            public bool enableMorpher;
-
-            //FlipAnim
-            public bool enableOnGUI;
-
-            //Overlay
-            public bool enableOverlay;
-
-            public bool enablePlugin;
-
-            //PokoCam
-            public bool enablePokoCam;
+            public bool enableFaceCam = false;
+            public bool enableMorpher = false;
+            public bool enableOnGUI = false;
+            public bool enableOverlay = false;
+            public bool enablePlugin = true;
+            public bool enablePokoCam = false;
             public float FaceCam_Distance = 20.0f;
             public float FaceCam_FOV = 20.0f;
             public float FaceCam_ShakeWidth = 0.01f;
@@ -2487,36 +2551,36 @@ namespace COM3D2.InOutAnimation.Plugin
             public float Morpher_Min = 0.05f;
             public float Morpher_Threshold = 0.3f;
             public float Morpher_Waitframe = 5.0f;
-
-            public bool OnGUI_HidePenis;
+            public bool OnGUI_HidePenis = false;
             public float OnGUI_offset = 5.0f;
             public float OnGUI_transparency = 1.0f;
-            public float OnGUI_x_offset;
+            public float OnGUI_x_offset = 0;
             public float OnGUI_x_scale = 1.0f;
-            public float OnGUI_y_offset;
+            public float OnGUI_y_offset = 0;
             public float OnGUI_y_scale = 1.0f;
             public float Overlay_CameraDistance = 0.25f;
-
-            public float Overlay_DirectionalOffset;
-            public float Overlay_LineScale;
+            public float Overlay_DirectionalOffset = 0;
+            public float Overlay_LineScale = 0;
             public float Overlay_LineWidth = 1.0f;
             public float Overlay_RenderQueue = 4000f;
-
             public float Overlay_Transparency = 0.7f;
-
-            //internal Rect PokoCam_Pos = Rect.zero;
-            //internal bool PokoCam_CustomPos = false;
             public float PokoCam_FOV = 90.0f;
             public bool PokoCam_HideBG = false;
             public bool PokoCam_HideManBody = true;
-            public Vector3 PokoCam_Offset = Vector3.zero;
+            public SerializableVector3 PokoCam_Offset = new SerializableVector3(0, 0, 0);
             public float PokoCam_ShakeWidth = 0.03f;
             public float PokoCam_SmoothSpeed = 0.3f;
             public float PokoCam_Transparency = 1.0f;
-            public bool PokoCam_UpsideDown;
+            public bool PokoCam_UpsideDown = false;
 
-            private Settings()
+
+            public Settings()
             {
+            }
+
+            public static Settings GetDef()
+            {
+                return new Settings();
             }
 
             private static Settings Instance => _instance ?? (_instance = new Settings());
@@ -2525,11 +2589,19 @@ namespace COM3D2.InOutAnimation.Plugin
             {
                 if (fileInfo == null)
                     return;
-
-                using (var stream = fileInfo.Open(FileMode.Create))
+                try
                 {
-                    var serializer = new XmlSerializer(typeof(Settings));
-                    serializer.Serialize(stream, Instance);
+                    using (var stream = fileInfo.Open(FileMode.Create))
+                    {
+                        var serializer = new XmlSerializer(typeof(Settings));
+                        serializer.Serialize(stream, Instance);
+                    }
+
+                    UnityEngine.Debug.Log("InOutAnimation - Settings saved successfully.");
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"InOutAnimation - Settings failed to save: {ex.Message}");
                 }
             }
 
@@ -2543,41 +2615,61 @@ namespace COM3D2.InOutAnimation.Plugin
                 Settings.fileInfo = fileInfo;
                 if (!fileInfo.Exists)
                 {
-                    using (fileInfo.Create())
+                    _instance = new Settings();
+                    Save();
+                    return _instance;
+                }
+
+                try
+                {
+                    using (var stream = fileInfo.Open(FileMode.Open))
                     {
+                        var serializer = new XmlSerializer(typeof(Settings));
+                        _instance = (Settings)serializer.Deserialize(stream);
                     }
 
+                    UnityEngine.Debug.Log("InOutAnimation - Settings loaded successfully.");
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"InOutAnimation - Settings failed to load: {ex.Message}");
+                    _instance = new Settings();
                     Save();
+                    UnityEngine.Debug.LogWarning("InOutAnimation - Created new default settings file.");
                 }
 
-                using (var stream = fileInfo.Open(FileMode.Open))
-                {
-                    var serializer = new XmlSerializer(typeof(Settings));
-                    var reader = XmlReader.Create(stream, new XmlReaderSettings());
-                    return _instance = (Settings)serializer.Deserialize(reader);
-                }
+                return _instance;
+            }
+        }
+
+        // SerializableVector3 类定义
+        [Serializable]
+        public class SerializableVector3
+        {
+            public float x;
+            public float y;
+            public float z;
+
+            public SerializableVector3()
+            {
             }
 
-            public static Settings GetDef()
+            public SerializableVector3(float x, float y, float z)
             {
-                var _ = new Settings();
-                return ReferenceEquals(_, _instance) ? null : _;
+                this.x = x;
+                this.y = y;
+                this.z = z;
             }
 
-            public void OpenFile()
+            // 隐式转换
+            public static implicit operator Vector3(SerializableVector3 sv3)
             {
-                if (!fileInfo.Exists)
-                    return;
-                var ps = new ProcessStartInfo
-                {
-                    FileName = "notepad",
-                    Arguments = fileInfo.FullName
-                };
-                using (var process = Process.Start(ps))
-                {
-                }
+                return new Vector3(sv3.x, sv3.y, sv3.z);
+            }
 
-                ;
+            public static implicit operator SerializableVector3(Vector3 v3)
+            {
+                return new SerializableVector3(v3.x, v3.y, v3.z);
             }
         }
 
