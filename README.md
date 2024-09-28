@@ -1,3 +1,16 @@
+# InOutAnimation
+
+fix for COM3D2.38.0
+
+
+
+
+
+
+
+
+
+
 # InOutAnimation (updated to latest COM)
 
 This is an edited version of InOutAnimation that works on latest version of COM.
