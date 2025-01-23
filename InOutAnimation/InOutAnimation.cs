@@ -27,9 +27,9 @@ namespace COM3D2.InOutAnimation.Plugin
             PluginName = "InOutAnimation",
 
 #if !COM3D25
-            PluginVersion = "1.0.0.5-Inory";
+            PluginVersion = "1.0.0.6-Inory";
 #else
-            PluginVersion = "1.0.0.5-CR-Inory";
+            PluginVersion = "1.0.0.6-CR-Inory";
 #endif
 
 
